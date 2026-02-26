@@ -43,11 +43,15 @@ export async function* streamChat(
   systemPrompt: string
 ): AsyncGenerator<string> {
   const model = getModel();
+  // Gemini requires history to start with 'user' role — drop leading 'model' messages
+  const mapped = messages.slice(0, -1).map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user' as const,
+    parts: [{ text: m.content }],
+  }));
+  const firstUserIdx = mapped.findIndex((m) => m.role === 'user');
+  const history = firstUserIdx > 0 ? mapped.slice(firstUserIdx) : mapped;
   const chat = model.startChat({
-    history: messages.slice(0, -1).map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    })),
+    history,
     systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
   });
 
