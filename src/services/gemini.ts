@@ -1,6 +1,22 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { UserProfile, JobListing, GeneratedCV, CVSections, AnalysisDetails } from '../types';
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 3000): Promise<T> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = (err as Error).message || '';
+      if (i < retries && (msg.includes('429') || msg.includes('Resource exhausted'))) {
+        await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Retry failed');
+}
+
 function getClient() {
   const key = localStorage.getItem('gemini_api_key');
   if (!key) throw new Error('No API key configured');
@@ -67,7 +83,7 @@ export async function parseCV(cvText: string): Promise<Partial<UserProfile>> {
 CV Text:
 ${cvText}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to parse CV');
@@ -92,7 +108,7 @@ export async function parseJobListing(markdown: string): Promise<Partial<JobList
 Content:
 ${markdown.slice(0, 15000)}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to parse job listing');
@@ -136,7 +152,7 @@ Return ONLY valid JSON with this structure:
 
 Important: Only use real data from the profile. Never invent experience. Reword and emphasize what's most relevant.`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   const text = result.response.text();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to generate CV');
@@ -156,6 +172,6 @@ Section: ${sectionName}
 Content: ${sectionContent}
 Job Context: ${jobContext}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetry(() => model.generateContent(prompt));
   return result.response.text().trim();
 }

@@ -104,7 +104,14 @@ export default function Chat() {
 
     setUploading(true);
     try {
-      const text = await extractTextFromPDF(file);
+      let text: string;
+      try {
+        text = await extractTextFromPDF(file);
+      } catch (pdfErr) {
+        addToast(`Failed to read PDF: ${(pdfErr as Error).message}`, 'error');
+        setUploading(false);
+        return;
+      }
       const parsed = await parseCV(text);
 
       const newProfile: UserProfile = {
@@ -138,7 +145,12 @@ export default function Chat() {
       addToast('CV parsed successfully!', 'success');
       await sendBotMessage(uploadMsg.content);
     } catch (err) {
-      addToast(`Failed to parse PDF: ${(err as Error).message}`, 'error');
+      const errMsg = (err as Error).message;
+      if (errMsg.includes('429') || errMsg.includes('Resource exhausted')) {
+        addToast('Rate limited by Gemini API. Wait a minute and try again.', 'error');
+      } else {
+        addToast(`Failed to analyze CV: ${errMsg}`, 'error');
+      }
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
