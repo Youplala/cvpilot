@@ -32,7 +32,7 @@ export async function* streamChat(
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     })),
-    systemInstruction: systemPrompt,
+    systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
   });
 
   const lastMsg = messages[messages.length - 1];
