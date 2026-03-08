@@ -32,15 +32,20 @@ const styles = StyleSheet.create({
   divider: { borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb', marginVertical: 6 },
 });
 
-function CVDocument({ cv, profile }: { cv: GeneratedCV; profile: { fullName: string; email: string; phone: string; location: string } }) {
+function CVDocument({ cv, profile }: { cv: GeneratedCV; profile: { fullName: string; email: string; phone: string; location: string; linkedinUrl?: string; websiteUrl?: string } }) {
+  const contactLine = [profile.email, profile.phone, profile.location].filter(Boolean).join('  •  ');
+  const linksLine = [
+    profile.linkedinUrl ? profile.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '') : '',
+    profile.websiteUrl ? profile.websiteUrl.replace(/^https?:\/\/(www\.)?/, '') : '',
+  ].filter(Boolean).join('  •  ');
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.name}>{profile.fullName}</Text>
-          <Text style={styles.contact}>
-            {[profile.email, profile.phone, profile.location].filter(Boolean).join('  •  ')}
-          </Text>
+          <Text style={styles.contact}>{contactLine}</Text>
+          {linksLine ? <Text style={styles.contact}>{linksLine}</Text> : null}
         </View>
 
         <Text style={styles.sectionTitle}>Summary</Text>
