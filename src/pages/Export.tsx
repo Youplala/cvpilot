@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Font, pdf } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Font, pdf, Link } from '@react-pdf/renderer';
 import { useAppStore } from '../stores/appStore';
 import Button from '../components/Button';
 import PageTransition from '../components/PageTransition';
@@ -19,7 +19,8 @@ const styles = StyleSheet.create({
   page: { fontFamily: 'Inter', fontSize: 10, padding: 40, color: '#1f2937' },
   header: { marginBottom: 20 },
   name: { fontSize: 22, fontWeight: 700, color: '#111827', marginBottom: 4 },
-  contact: { fontSize: 9, color: '#6b7280' },
+  contact: { fontSize: 9, color: '#6b7280', flexDirection: 'row' as const, flexWrap: 'wrap' as const },
+  link: { color: '#4f46e5', textDecoration: 'none' },
   sectionTitle: { fontSize: 11, fontWeight: 700, color: '#4f46e5', marginTop: 16, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 1 },
   summary: { fontSize: 10, lineHeight: 1.5, color: '#374151', marginBottom: 4 },
   expHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, marginBottom: 2 },
@@ -33,19 +34,26 @@ const styles = StyleSheet.create({
 });
 
 function CVDocument({ cv, profile }: { cv: GeneratedCV; profile: { fullName: string; email: string; phone: string; location: string; linkedinUrl?: string; websiteUrl?: string } }) {
-  const contactLine = [profile.email, profile.phone, profile.location].filter(Boolean).join('  •  ');
-  const linksLine = [
-    profile.linkedinUrl ? profile.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '') : '',
-    profile.websiteUrl ? profile.websiteUrl.replace(/^https?:\/\/(www\.)?/, '') : '',
-  ].filter(Boolean).join('  •  ');
+  const contactParts: { text: string; url?: string }[] = [];
+  if (profile.email) contactParts.push({ text: profile.email, url: `mailto:${profile.email}` });
+  if (profile.phone) contactParts.push({ text: profile.phone });
+  if (profile.location) contactParts.push({ text: profile.location });
+  if (profile.linkedinUrl) contactParts.push({ text: profile.linkedinUrl.replace(/^https?:\/\/(www\.)?/, ''), url: profile.linkedinUrl.startsWith('http') ? profile.linkedinUrl : `https://${profile.linkedinUrl}` });
+  if (profile.websiteUrl) contactParts.push({ text: profile.websiteUrl.replace(/^https?:\/\/(www\.)?/, ''), url: profile.websiteUrl.startsWith('http') ? profile.websiteUrl : `https://${profile.websiteUrl}` });
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.name}>{profile.fullName}</Text>
-          <Text style={styles.contact}>{contactLine}</Text>
-          {linksLine ? <Text style={styles.contact}>{linksLine}</Text> : null}
+          <Text style={styles.contact}>
+            {contactParts.map((p, i) => (
+              <React.Fragment key={i}>
+                {i > 0 ? '  •  ' : ''}
+                {p.url ? <Link src={p.url} style={styles.link}>{p.text}</Link> : p.text}
+              </React.Fragment>
+            ))}
+          </Text>
         </View>
 
         <Text style={styles.sectionTitle}>Summary</Text>
