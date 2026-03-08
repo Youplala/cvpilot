@@ -1,47 +1,136 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
+import { parseCV } from '../services/gemini';
+import { extractTextFromPDF } from '../services/pdf';
 import Button from '../components/Button';
 import PageTransition from '../components/PageTransition';
+import type { Resume } from '../types';
 
 export default function Profile() {
-  const { profile, setProfile, addToast } = useAppStore();
+  const { resumes, addResume, updateResume, removeResume, addToast } = useAppStore();
+  const [uploading, setUploading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    cvText: ''
+  });
 
-  if (!profile) {
-    return (
-      <PageTransition>
-        <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-          <div className="text-6xl mb-4">👤</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">No profile yet</h2>
-          <p className="text-gray-500 mb-6">Go to the Chat tab to upload your CV and build your profile.</p>
-          <Button onClick={() => window.location.hash = '#/chat'}>Start Chat</Button>
-        </div>
-      </PageTransition>
-    );
-  }
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const updateField = (field: string, value: unknown) => {
-    setProfile({ ...profile, [field]: value, updatedAt: Date.now() });
-    addToast('Profile updated', 'success');
+    setUploading(true);
+    try {
+      const text = await extractTextFromPDF(file);
+      const parsed = await parseCV(text);
+
+      const newResume: Resume = {
+        id: crypto.randomUUID(),
+        name: parsed.fullName || file.name.replace('.pdf', ''),
+        fullName: parsed.fullName || '',
+        email: parsed.email || '',
+        phone: parsed.phone || '',
+        location: parsed.location || '',
+        linkedinUrl: parsed.linkedinUrl || '',
+        websiteUrl: parsed.websiteUrl || '',
+        summary: parsed.summary || '',
+        experiences: (parsed.experiences || []).map((e) => ({ ...e, id: crypto.randomUUID() })),
+        education: (parsed.education || []).map((e) => ({ ...e, id: crypto.randomUUID() })),
+        skills: parsed.skills || [],
+        languages: parsed.languages || [],
+        certifications: parsed.certifications || [],
+        projects: (parsed.projects || []).map((p) => ({ ...p, id: crypto.randomUUID() })),
+        targetRole: parsed.targetRole || '',
+        rawCvText: text,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      
+      await addResume(newResume);
+      addToast('Resume uploaded successfully!', 'success');
+    } catch (err) {
+      addToast(`Failed to upload resume: ${(err as Error).message}`, 'error');
+    } finally {
+      setUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleTextSubmit = async () => {
+    if (!formData.cvText.trim() || !formData.name.trim()) return;
+
+    setUploading(true);
+    try {
+      const parsed = await parseCV(formData.cvText);
+
+      const newResume: Resume = {
+        id: crypto.randomUUID(),
+        name: formData.name,
+        fullName: parsed.fullName || '',
+        email: parsed.email || '',
+        phone: parsed.phone || '',
+        location: parsed.location || '',
+        linkedinUrl: parsed.linkedinUrl || '',
+        websiteUrl: parsed.websiteUrl || '',
+        summary: parsed.summary || '',
+        experiences: (parsed.experiences || []).map((e) => ({ ...e, id: crypto.randomUUID() })),
+        education: (parsed.education || []).map((e) => ({ ...e, id: crypto.randomUUID() })),
+        skills: parsed.skills || [],
+        languages: parsed.languages || [],
+        certifications: parsed.certifications || [],
+        projects: (parsed.projects || []).map((p) => ({ ...p, id: crypto.randomUUID() })),
+        targetRole: parsed.targetRole || '',
+        rawCvText: formData.cvText,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      
+      await addResume(newResume);
+      setFormData({ name: '', cvText: '' });
+      setShowForm(false);
+      addToast('Resume added successfully!', 'success');
+    } catch (err) {
+      addToast(`Failed to parse resume: ${(err as Error).message}`, 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+      await removeResume(id);
+      addToast('Resume deleted', 'info');
+    }
+  };
+
+  const updateField = (resume: Resume, field: string, value: unknown) => {
+    updateResume({ ...resume, [field]: value, updatedAt: Date.now() });
+    addToast('Resume updated', 'success');
     setEditing(null);
   };
 
-  const EditableField = ({ label, field, value }: { label: string; field: string; value: string }) => (
-    <div className="py-3 border-b border-gray-50">
+  const EditableField = ({ label, resume, field, value }: { 
+    label: string; 
+    resume: Resume;
+    field: string; 
+    value: string; 
+  }) => (
+    <div className="py-2 border-b border-gray-50 last:border-0">
       <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{label}</div>
-      {editing === field ? (
+      {editing === `${resume.id}-${field}` ? (
         <input
           autoFocus
           defaultValue={value}
-          onBlur={(e) => updateField(field, e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && updateField(field, (e.target as HTMLInputElement).value)}
+          onBlur={(e) => updateField(resume, field, e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && updateField(resume, field, (e.target as HTMLInputElement).value)}
           className="w-full px-2 py-1 border border-accent-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
       ) : (
         <div
           className="text-sm text-gray-800 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded -mx-2 min-h-[28px]"
-          onClick={() => setEditing(field)}
+          onClick={() => setEditing(`${resume.id}-${field}`)}
         >
           {value || <span className="text-gray-300 italic">Click to edit</span>}
         </div>
@@ -51,146 +140,164 @@ export default function Profile() {
 
   return (
     <PageTransition>
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-8">Your Profile</h1>
-
-        {/* Basic Info */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl border border-gray-200 p-6 mb-6"
-        >
-          <h2 className="text-sm font-semibold text-gray-600 mb-4">Basic Information</h2>
-          <EditableField label="Full Name" field="fullName" value={profile.fullName} />
-          <EditableField label="Email" field="email" value={profile.email} />
-          <EditableField label="Phone" field="phone" value={profile.phone} />
-          <EditableField label="Location" field="location" value={profile.location} />
-          <EditableField label="LinkedIn" field="linkedinUrl" value={profile.linkedinUrl} />
-          <EditableField label="Website" field="websiteUrl" value={profile.websiteUrl} />
-          <EditableField label="Target Role" field="targetRole" value={profile.targetRole} />
-        </motion.div>
-
-        {/* Summary */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="bg-white rounded-xl border border-gray-200 p-6 mb-6"
-        >
-          <h2 className="text-sm font-semibold text-gray-600 mb-4">Professional Summary</h2>
-          {editing === 'summary' ? (
-            <textarea
-              autoFocus
-              defaultValue={profile.summary}
-              onBlur={(e) => updateField('summary', e.target.value)}
-              rows={4}
-              className="w-full px-3 py-2 border border-accent-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Your Resumes</h1>
+            <p className="text-gray-500 mt-1">Manage multiple resumes for different positions</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              id="file-upload"
+              onChange={handleFileUpload}
             />
-          ) : (
-            <p
-              className="text-sm text-gray-700 leading-relaxed cursor-pointer hover:bg-gray-50 p-2 rounded"
-              onClick={() => setEditing('summary')}
+            <Button
+              variant="ghost"
+              onClick={() => document.getElementById('file-upload')?.click()}
+              loading={uploading}
             >
-              {profile.summary || <span className="text-gray-300 italic">Click to add a summary</span>}
-            </p>
-          )}
-        </motion.div>
+              📎 Upload PDF
+            </Button>
+            <Button onClick={() => setShowForm(true)}>
+              ➕ Add Text Resume
+            </Button>
+          </div>
+        </div>
 
-        {/* Experience */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-xl border border-gray-200 p-6 mb-6"
-        >
-          <h2 className="text-sm font-semibold text-gray-600 mb-4">
-            Experience ({profile.experiences.length})
-          </h2>
-          {profile.experiences.map((exp, i) => (
-            <div key={exp.id || i} className="py-3 border-b border-gray-50 last:border-0">
-              <div className="font-medium text-sm text-gray-900">{exp.title}</div>
-              <div className="text-sm text-accent-600">{exp.company}</div>
-              <div className="text-xs text-gray-400 mt-0.5">
-                {exp.startDate} — {exp.current ? 'Present' : exp.endDate}
+        {/* Add Resume Form */}
+        <AnimatePresence>
+          {showForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-white rounded-xl border border-gray-200 p-6 mb-6 overflow-hidden"
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Resume</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Resume Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Senior Developer Resume"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CV Text
+                  </label>
+                  <textarea
+                    value={formData.cvText}
+                    onChange={(e) => setFormData({ ...formData, cvText: e.target.value })}
+                    placeholder="Paste your CV text here..."
+                    rows={8}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500/30"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleTextSubmit}
+                    disabled={!formData.name.trim() || !formData.cvText.trim()}
+                    loading={uploading}
+                  >
+                    Parse & Add Resume
+                  </Button>
+                  <Button variant="ghost" onClick={() => setShowForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
-              <p className="text-sm text-gray-600 mt-1">{exp.description}</p>
-              {exp.highlights.length > 0 && (
-                <ul className="mt-1 space-y-0.5">
-                  {exp.highlights.map((h, j) => (
-                    <li key={j} className="text-sm text-gray-600 pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-accent-400">
-                      {h}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-          {profile.experiences.length === 0 && (
-            <p className="text-sm text-gray-300 italic">No experience added yet</p>
+            </motion.div>
           )}
-        </motion.div>
+        </AnimatePresence>
 
-        {/* Education */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="bg-white rounded-xl border border-gray-200 p-6 mb-6"
-        >
-          <h2 className="text-sm font-semibold text-gray-600 mb-4">
-            Education ({profile.education.length})
-          </h2>
-          {profile.education.map((edu, i) => (
-            <div key={edu.id || i} className="py-3 border-b border-gray-50 last:border-0">
-              <div className="font-medium text-sm text-gray-900">{edu.degree} in {edu.field}</div>
-              <div className="text-sm text-accent-600">{edu.school}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{edu.startDate} — {edu.endDate}</div>
-            </div>
+        {/* Empty State */}
+        {resumes.length === 0 && (
+          <div className="text-center py-16">
+            <div className="text-6xl mb-4">📄</div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">No resumes yet</h2>
+            <p className="text-gray-500 mb-6">Upload or add your first resume to get started.</p>
+          </div>
+        )}
+
+        {/* Resumes List */}
+        <div className="space-y-6">
+          {resumes.map((resume, index) => (
+            <motion.div
+              key={resume.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="bg-white rounded-xl border border-gray-200 overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-gray-100">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{resume.name}</h3>
+                  <p className="text-sm text-gray-500">
+                    Updated {new Date(resume.updatedAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDelete(resume.id, resume.name)}
+                  className="text-red-600 hover:bg-red-50"
+                >
+                  🗑️ Delete
+                </Button>
+              </div>
+              
+              <div className="p-4 grid md:grid-cols-2 gap-6">
+                {/* Basic Info */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-600 mb-3">Basic Information</h4>
+                  <EditableField label="Full Name" resume={resume} field="fullName" value={resume.fullName} />
+                  <EditableField label="Email" resume={resume} field="email" value={resume.email} />
+                  <EditableField label="Phone" resume={resume} field="phone" value={resume.phone} />
+                  <EditableField label="Location" resume={resume} field="location" value={resume.location} />
+                  <EditableField label="Target Role" resume={resume} field="targetRole" value={resume.targetRole} />
+                </div>
+
+                {/* Summary Stats */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-600 mb-3">Profile Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Experience:</span>
+                      <span className="font-medium">{resume.experiences.length} positions</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Education:</span>
+                      <span className="font-medium">{resume.education.length} entries</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Skills:</span>
+                      <span className="font-medium">{resume.skills.length} skills</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Languages:</span>
+                      <span className="font-medium">{resume.languages.length} languages</span>
+                    </div>
+                  </div>
+                  {resume.summary && (
+                    <div className="mt-4">
+                      <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Summary</label>
+                      <p className="text-sm text-gray-600 mt-1 leading-relaxed">{resume.summary}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
           ))}
-          {profile.education.length === 0 && (
-            <p className="text-sm text-gray-300 italic">No education added yet</p>
-          )}
-        </motion.div>
-
-        {/* Skills */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-xl border border-gray-200 p-6 mb-6"
-        >
-          <h2 className="text-sm font-semibold text-gray-600 mb-4">Skills</h2>
-          <div className="flex flex-wrap gap-2">
-            {profile.skills.map((s, i) => (
-              <span key={i} className="px-3 py-1 bg-accent-50 text-accent-700 text-sm rounded-full">
-                {s.name}
-              </span>
-            ))}
-            {profile.skills.length === 0 && (
-              <p className="text-sm text-gray-300 italic">No skills added yet</p>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Languages */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="bg-white rounded-xl border border-gray-200 p-6"
-        >
-          <h2 className="text-sm font-semibold text-gray-600 mb-4">Languages</h2>
-          <div className="flex flex-wrap gap-2">
-            {profile.languages.map((l, i) => (
-              <span key={i} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full">
-                {l.name} — {l.level}
-              </span>
-            ))}
-            {profile.languages.length === 0 && (
-              <p className="text-sm text-gray-300 italic">No languages added yet</p>
-            )}
-          </div>
-        </motion.div>
+        </div>
       </div>
     </PageTransition>
   );

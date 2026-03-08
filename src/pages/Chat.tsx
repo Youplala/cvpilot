@@ -5,20 +5,67 @@ import { useAppStore } from '../stores/appStore';
 import { streamChat, parseCV } from '../services/gemini';
 import { extractTextFromPDF } from '../services/pdf';
 import Button from '../components/Button';
-import type { ChatMessage, UserProfile } from '../types';
+import type { ChatMessage, UserProfile, Resume } from '../types';
 
-const SYSTEM_PROMPT = `You are CVPilot, a friendly and professional career assistant. Your job is to help users build their professional profile.
+const getSystemPrompt = (selectedResume?: Resume, hasResumes?: boolean) => {
+  if (selectedResume) {
+    return `You are CVPilot, a professional resume editing assistant. You're helping the user improve their resume: "${selectedResume.name}".
+
+Current resume details:
+- Name: ${selectedResume.fullName}
+- Target Role: ${selectedResume.targetRole}
+- Experience: ${selectedResume.experiences.length} positions
+- Skills: ${selectedResume.skills.map(s => s.name).join(', ')}
+
+Guidelines:
+- Help improve specific sections of this resume
+- Suggest ways to better highlight relevant experience
+- Recommend skill additions or modifications  
+- Help tailor the resume for specific job applications
+- When you make suggestions, be specific about which section to update
+- Be encouraging and constructive
+
+Be conversational but professional. Focus on actionable advice.`;
+  }
+
+  if (hasResumes) {
+    return `You are CVPilot, a friendly career assistant. The user has ${hasResumes ? 'multiple resumes' : 'a resume'} but hasn't selected one for editing.
+
+You can help with:
+- General career advice
+- Resume strategy and structure
+- Job search tips
+- Interview preparation
+
+Ask them to select a resume if they want to make specific improvements.
+
+Be conversational, warm, and helpful.`;
+  }
+
+  return `You are CVPilot, a friendly and professional career assistant. Your job is to help users build their professional profile.
 
 On first interaction:
 1. Introduce yourself briefly
-2. Ask the user to upload their CV (PDF) or describe their background
+2. Ask the user to upload their CV (PDF) or describe their background  
 3. When they share info, confirm what you understood and ask follow-up questions for gaps
 4. After you have enough info, say "Your profile is ready! You can now go to the Jobs tab to add job listings." and include [PROFILE_READY] in your response.
 
 Be conversational, warm, and concise. Don't use bullet points excessively. Feel like a career coach chat.`;
+};
 
 export default function Chat() {
-  const { messages, addMessage, profile, setProfile, addToast } = useAppStore();
+  const { 
+    messages, 
+    addMessage, 
+    profile, 
+    setProfile, 
+    resumes, 
+    addResume,
+    selectedResumeId, 
+    setSelectedResume,
+    updateResume,
+    addToast 
+  } = useAppStore();
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -26,6 +73,8 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  const selectedResume = resumes.find(r => r.id === selectedResumeId);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,8 +106,9 @@ export default function Chat() {
     let fullContent = '';
 
     try {
+      const systemPrompt = getSystemPrompt(selectedResume, resumes.length > 0);
       const chatMsgs = allMsgs.map((m) => ({ role: m.role, content: m.content }));
-      for await (const chunk of streamChat(chatMsgs, SYSTEM_PROMPT)) {
+      for await (const chunk of streamChat(chatMsgs, systemPrompt)) {
         fullContent += chunk;
         setStreamingContent(fullContent);
       }
@@ -114,6 +164,7 @@ export default function Chat() {
       }
       const parsed = await parseCV(text);
 
+      // Create both profile (for backward compatibility) and resume
       const newProfile: UserProfile = {
         id: profile?.id || crypto.randomUUID(),
         fullName: parsed.fullName || '',
@@ -134,6 +185,30 @@ export default function Chat() {
         updatedAt: Date.now(),
       };
       await setProfile(newProfile);
+
+      // Also create a resume
+      const newResume: Resume = {
+        id: crypto.randomUUID(),
+        name: parsed.fullName || file.name.replace('.pdf', ''),
+        fullName: parsed.fullName || '',
+        email: parsed.email || '',
+        phone: parsed.phone || '',
+        location: parsed.location || '',
+        linkedinUrl: parsed.linkedinUrl || '',
+        websiteUrl: parsed.websiteUrl || '',
+        summary: parsed.summary || '',
+        experiences: (parsed.experiences || []).map((e) => ({ ...e, id: crypto.randomUUID() })),
+        education: (parsed.education || []).map((e) => ({ ...e, id: crypto.randomUUID() })),
+        skills: parsed.skills || [],
+        languages: parsed.languages || [],
+        certifications: parsed.certifications || [],
+        projects: (parsed.projects || []).map((p) => ({ ...p, id: crypto.randomUUID() })),
+        targetRole: parsed.targetRole || '',
+        rawCvText: text,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      await addResume(newResume);
 
       const uploadMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -216,8 +291,34 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Input */}
+      {/* Resume selector and Input */}
       <div className="border-t border-gray-100 bg-white px-4 py-3">
+        {/* Resume selector */}
+        {resumes.length > 0 && (
+          <div className="max-w-2xl mx-auto mb-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Editing:</span>
+              <select
+                value={selectedResumeId || ''}
+                onChange={(e) => setSelectedResume(e.target.value || null)}
+                className="border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+              >
+                <option value="">No resume selected</option>
+                {resumes.map((resume) => (
+                  <option key={resume.id} value={resume.id}>
+                    {resume.name}
+                  </option>
+                ))}
+              </select>
+              {selectedResume && (
+                <span className="text-xs text-gray-400">
+                  ({selectedResume.experiences.length} exp, {selectedResume.skills.length} skills)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="max-w-2xl mx-auto flex gap-2 items-end">
           <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
           <Button
@@ -239,7 +340,13 @@ export default function Chat() {
                   handleSend();
                 }
               }}
-              placeholder="Type a message..."
+              placeholder={
+                selectedResume 
+                  ? `Ask me to improve "${selectedResume.name}"...`
+                  : resumes.length > 0
+                  ? "Select a resume above to start editing..."
+                  : "Type a message or upload a PDF..."
+              }
               rows={1}
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent-500/30 focus:border-accent-400"
             />

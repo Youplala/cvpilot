@@ -18,6 +18,29 @@ export interface UserProfile {
   updatedAt: number;
 }
 
+// New Resume type - similar to UserProfile but separate for multiple resume support
+export interface Resume {
+  id: string;
+  name: string; // User-friendly name for the resume
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  linkedinUrl: string;
+  websiteUrl: string;
+  summary: string;
+  experiences: Experience[];
+  education: Education[];
+  skills: Skill[];
+  languages: Language[];
+  certifications: Certification[];
+  projects: Project[];
+  targetRole: string;
+  rawCvText: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Experience {
   id: string;
   company: string;
@@ -132,4 +155,13 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+}
+
+export interface ResumeScore {
+  resumeId: string;
+  resumeName: string;
+  jobId: string;
+  score: number; // Overall score 0-100
+  analysisDetails: AnalysisDetails;
+  createdAt: number;
 }

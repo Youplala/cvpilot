@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { UserProfile, JobListing, GeneratedCV, CVSections, AnalysisDetails } from '../types';
+import type { UserProfile, Resume, JobListing, GeneratedCV, CVSections, AnalysisDetails, ResumeScore } from '../types';
 
 async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 3000): Promise<T> {
   for (let i = 0; i <= retries; i++) {
@@ -178,4 +178,41 @@ Job Context: ${jobContext}`;
 
   const result = await withRetry(() => model.generateContent(prompt));
   return result.response.text().trim();
+}
+
+export async function batchScoreResumes(
+  resumes: Resume[],
+  job: JobListing
+): Promise<ResumeScore[]> {
+  const scores: ResumeScore[] = [];
+  
+  for (const resume of resumes) {
+    try {
+      const { analysis } = await generateTailoredCV(resume, job);
+      
+      // Calculate overall score as average of analysis scores
+      const overallScore = Math.round(
+        (analysis.hardSkills + analysis.softSkills + analysis.experienceLevel + analysis.educationFit) / 4
+      );
+      
+      const score: ResumeScore = {
+        resumeId: resume.id,
+        resumeName: resume.name,
+        jobId: job.id,
+        score: overallScore,
+        analysisDetails: analysis,
+        createdAt: Date.now()
+      };
+      
+      scores.push(score);
+      
+      // Add small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (error) {
+      console.error(`Failed to score resume ${resume.name}:`, error);
+      // Continue with other resumes even if one fails
+    }
+  }
+  
+  return scores.sort((a, b) => b.score - a.score);
 }

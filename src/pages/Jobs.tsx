@@ -9,7 +9,7 @@ import PageTransition from '../components/PageTransition';
 import type { JobListing } from '../types';
 
 export default function Jobs() {
-  const { jobs, addJob, removeJob, profile, addToast } = useAppStore();
+  const { jobs, addJob, removeJob, profile, resumes, addToast } = useAppStore();
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -50,6 +50,14 @@ export default function Jobs() {
       return;
     }
     navigate(`/generate/${jobId}`);
+  };
+
+  const handleCompare = (jobId: string) => {
+    if (resumes.length === 0) {
+      addToast('Add some resumes first to compare them', 'error');
+      return;
+    }
+    navigate(`/compare?jobId=${jobId}`);
   };
 
   return (
@@ -119,7 +127,10 @@ export default function Jobs() {
                       )}
                     </div>
                     <div className="flex flex-col gap-2 ml-4">
-                      <Button size="sm" onClick={() => handleGenerate(job.id)}>
+                      <Button size="sm" onClick={() => handleCompare(job.id)}>
+                        📊 Compare Resumes
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleGenerate(job.id)}>
                         Generate CV
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => removeJob(job.id)}>

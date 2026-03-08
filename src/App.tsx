@@ -8,6 +8,7 @@ import ApiKeySetup from './pages/ApiKeySetup';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
 import Jobs from './pages/Jobs';
+import Compare from './pages/Compare';
 import CVList from './pages/CVList';
 import Generate from './pages/Generate';
 import Editor from './pages/Editor';
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/jobs" element={<Jobs />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/cvs" element={<CVList />} />
           <Route path="/generate/:jobId" element={<Generate />} />
           <Route path="/editor/:cvId" element={<Editor />} />
