@@ -24,7 +24,7 @@ function getClient() {
 }
 
 function getModel() {
-  return getClient().getGenerativeModel({ model: 'gemini-2.0-flash' });
+  return getClient().getGenerativeModel({ model: 'gemini-3.5-flash' });
 }
 
 export async function testApiKey(key: string): Promise<boolean> {
