@@ -30,7 +30,7 @@ function getModel() {
 export async function testApiKey(key: string): Promise<boolean> {
   try {
     const client = new GoogleGenerativeAI(key);
-    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = client.getGenerativeModel({ model: 'gemini-3.5-flash' });
     await model.generateContent('Say "ok"');
     return true;
   } catch {
